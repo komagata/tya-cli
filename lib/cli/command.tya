@@ -53,7 +53,7 @@ class Command
     self
 
   # Command.call executes the command.
-  # @param _invocation Invocation invocation context.
+  # @param _invocation Invocation invocation data.
   # @return Result command result.
   call: _invocation ->
     Result.failure("Command {self.name} does not implement call")

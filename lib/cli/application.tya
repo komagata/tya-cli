@@ -34,9 +34,9 @@ class Application
       self.name = name
 
   # Application.call executes the root command.
-  # @param _ctx Invocation invocation context.
+  # @param _invocation Invocation invocation data.
   # @return Result command result.
-  call: _ctx -> Result.success(commands_help([]))
+  call: _invocation -> Result.success(commands_help([]))
 
   # Application.find returns a top-level command by name or alias.
   # @param name String command name or alias.
@@ -290,8 +290,8 @@ class Application
     arguments_error = assign_arguments!(params, self, parsed.arguments, [name])
     if arguments_error != nil
       return Result.failure(arguments_error)
-    ctx = Invocation(command: self, path: [name], args: argv, params: params)
-    call(ctx)
+    invocation = Invocation(command: self, path: [name], args: argv, params: params)
+    call(invocation)
 
   # Application.includes? returns whether values contains value.
   # @param values Array values to search.

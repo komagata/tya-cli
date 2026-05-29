@@ -12,8 +12,8 @@ class EchoCommand extends cli.Command
 
   name: "echo"
 
-  call: ctx ->
-    input = ctx.params["input"]
+  call: invocation ->
+    input = invocation.params["input"]
     if input == nil
       return cli.Result.success("wuh?")
     cli.Result.success(input)
@@ -25,8 +25,8 @@ class StartCommand extends cli.Command
 
   name: "start"
 
-  call: ctx ->
-    root = ctx.params["root"]
+  call: invocation ->
+    root = invocation.params["root"]
     cli.Result.success("started - root: {root}")
 
 class StopCommand extends cli.Command
@@ -36,8 +36,8 @@ class StopCommand extends cli.Command
 
   options: [cli.Spec.boolean_option("graceful", "Graceful stop", true)]
 
-  call: ctx ->
-    graceful = ctx.params["graceful"]
+  call: invocation ->
+    graceful = invocation.params["graceful"]
     cli.Result.success("stopped - graceful: {graceful}")
 
 class ExecCommand extends cli.Command
@@ -47,9 +47,9 @@ class ExecCommand extends cli.Command
 
   name: "exec"
 
-  call: ctx ->
-    dirs = ctx.params["dirs"]
-    task = ctx.params["task"]
+  call: invocation ->
+    dirs = invocation.params["dirs"]
+    task = invocation.params["task"]
     cli.Result.success("exec - task: {task}, dirs: {dirs.len()}")
 
 class ConfigCommand extends cli.Command
@@ -59,8 +59,8 @@ class ConfigCommand extends cli.Command
 
   options: [cli.Spec.option("apps", "Generate configuration for specific apps", { default: [], array: true, aliases: ["-a"] })]
 
-  call: ctx ->
-    apps = ctx.params["apps"]
+  call: invocation ->
+    apps = invocation.params["apps"]
     cli.Result.success("generated configuration for apps: {apps.len()}")
 
 class TestCommand extends cli.Command
@@ -70,8 +70,8 @@ class TestCommand extends cli.Command
 
   options: [cli.Spec.option("framework", "Test framework", { default: "minitest", allowed: ["minitest", "rspec"] })]
 
-  call: ctx ->
-    framework = ctx.params["framework"]
+  call: invocation ->
+    framework = invocation.params["framework"]
     cli.Result.success("generated tests - framework: {framework}")
 
 class VersionCommand extends cli.Command
@@ -115,11 +115,11 @@ class ConvertApp extends cli.Application
 
   options: [cli.Spec.option("format", "Output format", { default: "png", allowed: ["png", "jpeg"] }), cli.Spec.boolean_option("overwrite", "Overwrite output file", false, { aliases: ["-f"] })]
 
-  call: ctx ->
-    input = ctx.params["input"]
-    output = ctx.params["output"]
-    format = ctx.params["format"]
-    overwrite = ctx.params["overwrite"]
+  call: invocation ->
+    input = invocation.params["input"]
+    output = invocation.params["output"]
+    format = invocation.params["format"]
+    overwrite = invocation.params["overwrite"]
     cli.Result.success("{input} -> {output} ({format}, overwrite: {overwrite})")
 
 class CliTest extends TestCase

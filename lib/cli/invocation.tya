@@ -1,4 +1,4 @@
-# Invocation stores the immutable context passed to a command call.
+# Invocation stores the immutable invocation data passed to a command call.
 record Invocation
   # Invocation.command stores the command object being invoked.
   # @type Command

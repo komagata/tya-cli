@@ -10,8 +10,8 @@ class HelloCommand extends cli.Command
   description: "Print a greeting"
   arguments: [cli.Spec.argument("name", "Name to greet")]
 
-  call: ctx ->
-    name = ctx.get("name")
+  call: invocation ->
+    name = invocation.params["name"]
     if name == nil
       name = "world"
     cli.Result.success("Hello, {name}!")
@@ -39,8 +39,8 @@ class ConvertApp extends cli.Application
     cli.Spec.boolean_option("overwrite", "Overwrite output file", false, { aliases: ["-f"] })
   ]
 
-  call: ctx ->
-    input = ctx.get("input")
-    output = ctx.get("output")
+  call: invocation ->
+    input = invocation.params["input"]
+    output = invocation.params["output"]
     cli.Result.success("{input} -> {output}")
 ```

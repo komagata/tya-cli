@@ -9,8 +9,8 @@ class HelloCommand extends cli.Command
 
   name: "hello"
 
-  call: ctx ->
-    name = ctx.params["name"]
+  call: invocation ->
+    name = invocation.params["name"]
     if name == nil
       name = "world"
     cli.Result.success("Hello, {name}!")
