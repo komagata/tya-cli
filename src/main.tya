@@ -1,0 +1,23 @@
+import cli/*
+
+class HelloCommand extends cli.Command
+  aliases: ["hi"]
+
+  arguments: [cli.Spec.argument("name", "Name to greet")]
+
+  description: "Print a greeting"
+
+  name: "hello"
+
+  call: ctx ->
+    name = ctx.params["name"]
+    if name == nil
+      name = "world"
+    cli.Result.success("Hello, {name}!")
+
+class TyaCliExample extends cli.Application
+  commands: [HelloCommand()]
+
+  name: "tya-cli-example"
+app = TyaCliExample()
+app.run_and_exit(args())

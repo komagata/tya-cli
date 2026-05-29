@@ -1,0 +1,422 @@
+import option_parser
+
+# Application stores and dispatches a CLI command tree.
+class Application
+  # Application.arguments stores root positional argument specs.
+  # @type Array
+  arguments: []
+
+  # Application.commands stores top-level commands.
+  # @type Array
+  commands: []
+
+  # Application.description stores help text for the root command.
+  # @type String
+  description: ""
+
+  # Application.examples stores root example suffixes.
+  # @type Array
+  examples: []
+
+  # Application.name stores the executable name used in help output.
+  # @type String
+  name: ""
+
+  # Application.options stores root option specs.
+  # @type Array
+  options: []
+
+  # Application.initialize initializes the command application.
+  # @param name String executable name for help output.
+  # @return Self the initialized application.
+  initialize: name = nil ->
+    if name != nil
+      self.name = name
+
+  # Application.call executes the root command.
+  # @param _ctx Invocation invocation context.
+  # @return Result command result.
+  call: _ctx -> Result.success(commands_help([]))
+
+  # Application.find returns a top-level command by name or alias.
+  # @param name String command name or alias.
+  # @return Command? matching command.
+  find: name ->
+    for command in commands
+      if command.matches?(name)
+        return command
+    nil
+
+  # Application.help_line returns one root command help line.
+  # @param prefix Array command path prefix.
+  # @return String formatted help line.
+  help_line: prefix ->
+    usage = usage_for(prefix)
+    if description == ""
+      usage
+    else
+      "{usage} # {self.description}"
+
+  # Application.register registers a top-level command.
+  # @param command Command command to register.
+  # @return Self this application.
+  register: command ->
+    commands.push(command)
+    self
+
+  # Application.run dispatches argv and returns the command result.
+  # @param argv Array command-line arguments.
+  # @return Result command result.
+  run: argv ->
+    if (
+      argv.len() > 0 and (argv[0] == "--help" or argv[0] == "-h" or argv[0] == "help")
+    )
+      return Result.success(root_help())
+    if commands.len() > 0 and argv.len() > 0
+      command = find(argv[0])
+      if command != nil
+        return dispatch(command, [name], argv.slice(1, argv.len()))
+      if arguments.len() == 0 and options.len() == 0
+        return Result.failure(
+          "ERROR: Unknown command \"{argv[0]}\"\n\n{self.commands_help([])}"
+        )
+    if (
+      commands.len() > 0 and argv.len() == 0 and arguments.len() == 0 and options.len() == 0
+    )
+      return Result.success(commands_help([]))
+    dispatch_root(argv)
+
+  # Application.run_and_exit runs the application and exits the process.
+  # @param argv Array command-line arguments.
+  # @return Nil exits the process.
+  run_and_exit: argv ->
+    outcome = run(argv)
+    if outcome.output != ""
+      println(outcome.output)
+    exit(outcome.status)
+
+  # Application.usage_for returns usage text for the root command.
+  # @param _prefix Array ignored command path prefix.
+  # @return String usage text.
+  usage_for: _prefix ->
+    parts = [name]
+    if commands.len() > 0
+      parts.push("[SUBCOMMAND]")
+    for argument in arguments
+      parts.push(argument_label(argument))
+    join(parts, " ")
+
+  # Application.argument_label formats one positional argument spec.
+  # @param spec Dict argument spec.
+  # @return String formatted argument label.
+  private argument_label: spec ->
+    argname = spec["argname"]
+    upper = argname.upper()
+    if spec["required"]
+      upper
+    else
+      "[{upper}]"
+
+  # Application.assign_arguments! assigns positional arguments into values.
+  # @param values Dict destination values.
+  # @param command Command command spec.
+  # @param raw_args Array parsed positional arguments.
+  # @param full_path Array full command path.
+  # @return String? error message when assignment fails.
+  private assign_arguments!: values, command, raw_args, full_path ->
+    pos = 0
+    for argument in command.arguments
+      if argument["array"]
+        rest = raw_args.slice(pos, raw_args.len())
+        values[argument["argname"]] = rest
+        pos = raw_args.len()
+      elseif pos < raw_args.len()
+        values[argument["argname"]] = raw_args[pos]
+        pos = pos + 1
+      elseif argument["required"]
+        path_text = join(full_path, " ")
+        usage = command.usage_for(full_path.slice(0, full_path.len() - 1))
+        return "ERROR: \"{path_text}\" was called with no arguments\nUsage: \"{usage}\""
+      else
+        values[argument["argname"]] = nil
+    nil
+
+  # Application.assign_options! assigns parsed options into values.
+  # @param values Dict destination values.
+  # @param command Command command spec.
+  # @param parsed OptionParser parsed option parser.
+  # @param full_path Array full command path.
+  # @return String? error message when assignment fails.
+  private assign_options!: values, command, parsed, full_path ->
+    for option in command.options
+      name = option["name"]
+      values[name] = option["default"]
+      if option["array"] and values[name] == nil
+        values[name] = []
+    for raw_option in parsed.options
+      raw_name = raw_option["name"]
+      value = raw_option["value"]
+      if raw_option["kind"] == "long" and raw_name.starts_with("no-")
+        raw_name = raw_name.slice(3, raw_name.len())
+        value = false
+      matched = nil
+      for option in command.options
+        if option_matches?(option, raw_name)
+          matched = option
+      if matched == nil
+        path_text = join(full_path, " ")
+        raw_text = raw_option["raw"]
+        return "ERROR: \"{path_text}\" was called with arguments \"{raw_text}\""
+      if matched["array"]
+        value = split(value, ",")
+      if (
+        matched["allowed"].len() > 0 and not includes?(matched["allowed"], value)
+      )
+        path_text = join(full_path, " ")
+        raw_text = raw_option["raw"]
+        return "ERROR: \"{path_text}\" was called with arguments \"{raw_text}\""
+      values[matched["name"]] = value
+    nil
+
+  # Application.command_help returns full help for one command.
+  # @param command Command command to describe.
+  # @param full_path Array full command path.
+  # @return String formatted help text.
+  private command_help: command, full_path ->
+    lines = []
+    lines.push("Command:")
+    path_text = join(full_path, " ")
+    lines.push("  {path_text}")
+    lines.push("")
+    lines.push("Usage:")
+    lines.push("  {command.usage_for(full_path.slice(0, full_path.len() - 1))}")
+    if command.description != ""
+      lines.push("")
+      lines.push("Description:")
+      lines.push("  {command.description}")
+    if command.arguments.len() > 0
+      lines.push("")
+      lines.push("Arguments:")
+      for argument in command.arguments
+        label = argument_label(argument)
+        description = argument["description"]
+        lines.push("  {label} # {description}")
+    lines.push("")
+    lines.push("Options:")
+    lines.push("  --help, -h # Print this help")
+    for option in command.options
+      label = option_label(option)
+      description = option["description"]
+      lines.push("  {label} # {description}")
+    if command.examples.len() > 0
+      lines.push("")
+      lines.push("Examples:")
+      for example in command.examples
+        lines.push("  {path_text} {example}")
+    join(lines, "\n")
+
+  # Application.commands_for returns top-level commands for a path.
+  # @param _prefix Array command path prefix.
+  # @return Array commands for the prefix.
+  private commands_for: _prefix -> commands
+
+  # Application.commands_help returns command-list help text.
+  # @param prefix Array command path prefix.
+  # @return String formatted command-list help.
+  private commands_help: prefix ->
+    lines = ["Commands:"]
+    for command in commands_for(prefix)
+      if not command.hidden
+        lines.push("  {command.help_line([self.name])}")
+    join(lines, "\n")
+
+  # Application.dispatch dispatches argv to a command or subcommand.
+  # @param command Command command to dispatch.
+  # @param prefix Array command path prefix.
+  # @param argv Array remaining command-line arguments.
+  # @return Result command result.
+  private dispatch: command, prefix, argv ->
+    full_path = []
+    for item in prefix
+      full_path.push(item)
+    full_path.push(command.name)
+    if argv.len() > 0 and (argv[0] == "--help" or argv[0] == "-h")
+      return Result.success(command_help(command, full_path))
+    if command.subcommands.len() > 0
+      if argv.len() == 0
+        return Result.success(subcommands_help(command, full_path))
+      subcommand = command.find(argv[0])
+      if subcommand == nil
+        path_text = join(full_path, " ")
+        subcommands_text = subcommands_help(command, full_path)
+        return Result.failure(
+          "ERROR: Unknown command \"{path_text} {argv[0]}\"\n\n{subcommands_text}"
+        )
+      return dispatch(subcommand, full_path, argv.slice(1, argv.len()))
+    parsed = option_parser.OptionParser.parse(
+      normalize_option_aliases(command, argv)
+    )
+    params = {}
+    options_error = assign_options!(params, command, parsed, full_path)
+    if options_error != nil
+      return Result.failure(options_error)
+    arguments_error = assign_arguments!(
+      params,
+      command,
+      parsed.arguments,
+      full_path
+    )
+    if arguments_error != nil
+      return Result.failure(arguments_error)
+    invocation = Invocation(
+      command: command,
+      path: full_path,
+      args: argv,
+      params: params
+    )
+    command.call(invocation)
+
+  # Application.dispatch_root dispatches argv to the root command.
+  # @param argv Array command-line arguments.
+  # @return Result command result.
+  private dispatch_root: argv ->
+    parsed = option_parser.OptionParser.parse(
+      normalize_option_aliases(self, argv)
+    )
+    params = {}
+    options_error = assign_options!(params, self, parsed, [name])
+    if options_error != nil
+      return Result.failure(options_error)
+    arguments_error = assign_arguments!(params, self, parsed.arguments, [name])
+    if arguments_error != nil
+      return Result.failure(arguments_error)
+    ctx = Invocation(command: self, path: [name], args: argv, params: params)
+    call(ctx)
+
+  # Application.includes? returns whether values contains value.
+  # @param values Array values to search.
+  # @param value Any value to find.
+  # @return Boolean whether the value is included.
+  private includes?: values, value ->
+    for item in values
+      if item == value
+        return true
+    false
+
+  # Application.index_of returns the byte index of needle in text.
+  # @param text String text to search.
+  # @param needle String one-byte text to find.
+  # @return Int byte index or -1 when not found.
+  private index_of: text, needle ->
+    i = 0
+    while i < text.byte_len()
+      if text[i] == needle
+        return i
+      i = i + 1
+    -1
+
+  # Application.join joins values with a separator.
+  # @param values Array values to join.
+  # @param separator String separator text.
+  # @return String joined text.
+  private join: values, separator ->
+    text = ""
+    i = 0
+    while i < values.len()
+      if i > 0
+        text = "{text}{separator}"
+      text = "{text}{values[i]}"
+      i = i + 1
+    text
+
+  # Application.normalize_option_aliases normalizes short aliases with values.
+  # @param command Command command spec.
+  # @param argv Array raw command-line arguments.
+  # @return Array normalized arguments.
+  private normalize_option_aliases: command, argv ->
+    normalized = []
+    for arg in argv
+      if arg.starts_with("-") and not arg.starts_with("--")
+        eq = index_of(arg, "=")
+        if eq > 0
+          alias = arg.slice(0, eq)
+          value = arg.slice(eq + 1, arg.len())
+          candidate = alias.slice(1, alias.len())
+          matched = nil
+          for option in command.options
+            if option_matches?(option, candidate)
+              matched = option
+          if matched != nil
+            normalized.push("--{matched[\"name\"]}={value}")
+          else
+            normalized.push(arg)
+        else
+          normalized.push(arg)
+      else
+        normalized.push(arg)
+    normalized
+
+  # Application.option_label formats one option spec for help output.
+  # @param option Dict option spec.
+  # @return String formatted option label.
+  private option_label: option ->
+    labels = ["--{option[\"name\"]}"]
+    for alias in option["aliases"]
+      labels.push(alias)
+    join(labels, ", ")
+
+  # Application.option_matches? returns whether candidate matches an option.
+  # @param option Dict option spec.
+  # @param candidate String option name or alias candidate.
+  # @return Boolean whether the option matches.
+  private option_matches?: option, candidate ->
+    if candidate == option["name"]
+      return true
+    for alias in option["aliases"]
+      clean = alias
+      if alias.starts_with("--")
+        clean = alias.slice(2, alias.len())
+      elseif alias.starts_with("-")
+        clean = alias.slice(1, alias.len())
+      if candidate == clean
+        return true
+    false
+
+  # Application.root_help returns help text for the root command.
+  # @return String formatted help text.
+  private root_help: ->
+    if (
+      arguments.len() > 0 or options.len() > 0 or examples.len() > 0 or description != ""
+    )
+      return command_help(self, [name])
+    commands_help([])
+
+  # Application.split splits value text by separator.
+  # @param value Any value to split.
+  # @param separator String one-byte separator.
+  # @return Array split parts.
+  private split: value, separator ->
+    parts = []
+    if value == nil
+      return parts
+    text = "{value}"
+    start = 0
+    i = 0
+    while i < text.byte_len()
+      if text[i] == separator
+        parts.push(text.slice(start, i))
+        start = i + 1
+      i = i + 1
+    parts.push(text.slice(start, text.len()))
+    parts
+
+  # Application.subcommands_help returns command-list help for subcommands.
+  # @param command Command parent command.
+  # @param full_path Array full command path.
+  # @return String formatted subcommand help.
+  private subcommands_help: command, full_path ->
+    lines = ["Commands:"]
+    for subcommand in command.subcommands
+      if not subcommand.hidden
+        lines.push("  {subcommand.help_line(full_path)}")
+    join(lines, "\n")

@@ -1,0 +1,253 @@
+import unittest/* as *
+import cli/*
+
+class EchoCommand extends cli.Command
+  aliases: ["say"]
+
+  arguments: [cli.Spec.argument("input", "Input to print")]
+
+  description: "Print input"
+
+  examples: ["# Prints 'wuh?'", "hello # Prints 'hello'"]
+
+  name: "echo"
+
+  call: ctx ->
+    input = ctx.params["input"]
+    if input == nil
+      return cli.Result.success("wuh?")
+    cli.Result.success(input)
+
+class StartCommand extends cli.Command
+  arguments: [cli.Spec.argument("root", "Root directory", { required: true })]
+
+  description: "Start machinery"
+
+  name: "start"
+
+  call: ctx ->
+    root = ctx.params["root"]
+    cli.Result.success("started - root: {root}")
+
+class StopCommand extends cli.Command
+  description: "Stop machinery"
+
+  name: "stop"
+
+  options: [cli.Spec.boolean_option("graceful", "Graceful stop", true)]
+
+  call: ctx ->
+    graceful = ctx.params["graceful"]
+    cli.Result.success("stopped - graceful: {graceful}")
+
+class ExecCommand extends cli.Command
+  arguments: [cli.Spec.argument("task", "Task to be executed", { required: true }), cli.Spec.argument("dirs", "Optional directories", { array: true })]
+
+  description: "Execute a task"
+
+  name: "exec"
+
+  call: ctx ->
+    dirs = ctx.params["dirs"]
+    task = ctx.params["task"]
+    cli.Result.success("exec - task: {task}, dirs: {dirs.len()}")
+
+class ConfigCommand extends cli.Command
+  description: "Generate configuration"
+
+  name: "config"
+
+  options: [cli.Spec.option("apps", "Generate configuration for specific apps", { default: [], array: true, aliases: ["-a"] })]
+
+  call: ctx ->
+    apps = ctx.params["apps"]
+    cli.Result.success("generated configuration for apps: {apps.len()}")
+
+class TestCommand extends cli.Command
+  description: "Generate tests"
+
+  name: "test"
+
+  options: [cli.Spec.option("framework", "Test framework", { default: "minitest", allowed: ["minitest", "rspec"] })]
+
+  call: ctx ->
+    framework = ctx.params["framework"]
+    cli.Result.success("generated tests - framework: {framework}")
+
+class VersionCommand extends cli.Command
+  aliases: ["v", "-v", "--version"]
+
+  description: "Print version"
+
+  name: "version"
+
+  call: _ctx -> cli.Result.success("1.0.0")
+
+class HiddenCommand extends cli.Command
+  description: "Generate completion"
+
+  hidden: true
+
+  name: "completion"
+
+  call: _ctx -> cli.Result.success("completion")
+
+class GenerateCommand extends cli.Command
+  aliases: ["g"]
+
+  description: "Generate things"
+
+  name: "generate"
+
+  subcommands: [ConfigCommand(), TestCommand()]
+
+class RootCommand extends cli.Application
+  commands: [VersionCommand(), EchoCommand(), StartCommand(), StopCommand(), ExecCommand(), HiddenCommand(), GenerateCommand()]
+
+  name: "foo"
+
+class ConvertApp extends cli.Application
+  arguments: [cli.Spec.argument("input", "Input file", { required: true }), cli.Spec.argument("output", "Output file", { required: true })]
+
+  description: "Convert files"
+
+  name: "convert"
+
+  options: [cli.Spec.option("format", "Output format", { default: "png", allowed: ["png", "jpeg"] }), cli.Spec.boolean_option("overwrite", "Overwrite output file", false, { aliases: ["-f"] })]
+
+  call: ctx ->
+    input = ctx.params["input"]
+    output = ctx.params["output"]
+    format = ctx.params["format"]
+    overwrite = ctx.params["overwrite"]
+    cli.Result.success("{input} -> {output} ({format}, overwrite: {overwrite})")
+
+class CliTest extends TestCase
+  app: nil
+
+  setup: ->
+    self.app = RootCommand()
+
+  test_array_argument: ->
+    assert_equal(
+      "exec - task: test, dirs: 0",
+      app.run(["exec", "test"]).output,
+      "none"
+    )
+    assert_equal(
+      "exec - task: test, dirs: 2",
+      app.run(["exec", "test", "a", "b"]).output,
+      "many"
+    )
+
+  test_array_option: ->
+    assert_equal(
+      "generated configuration for apps: 2",
+      app.run(["generate", "config", "--apps=web,api"]).output,
+      "apps"
+    )
+    assert_equal(
+      "generated configuration for apps: 1",
+      app.run(["g", "config", "-a=web"]).output,
+      "alias"
+    )
+
+  test_available_commands: ->
+    outcome = app.run([])
+    assert_equal(0, outcome.status, "status")
+    assert_equal(
+      "Commands:\n  foo version # Print version\n  foo echo [INPUT] # Print input\n  foo start ROOT # Start machinery\n  foo stop # Stop machinery\n  foo exec TASK [DIRS] # Execute a task\n  foo generate [SUBCOMMAND] # Generate things",
+      outcome.output,
+      "help"
+    )
+
+  test_boolean_option: ->
+    assert_equal(
+      "stopped - graceful: true",
+      app.run(["stop"]).output,
+      "default"
+    )
+    assert_equal(
+      "stopped - graceful: false",
+      app.run(["stop", "--no-graceful"]).output,
+      "false"
+    )
+
+  test_command_help: ->
+    outcome = app.run(["echo", "--help"])
+    assert_equal(
+      "Command:\n  foo echo\n\nUsage:\n  foo echo [INPUT]\n\nDescription:\n  Print input\n\nArguments:\n  [INPUT] # Input to print\n\nOptions:\n  --help, -h # Print this help\n\nExamples:\n  foo echo # Prints 'wuh?'\n  foo echo hello # Prints 'hello'",
+      outcome.output,
+      "help"
+    )
+
+  test_option_values: ->
+    assert_equal(
+      "generated tests - framework: minitest",
+      app.run(["generate", "test"]).output,
+      "default"
+    )
+    assert_equal(
+      "generated tests - framework: rspec",
+      app.run(["generate", "test", "--framework=rspec"]).output,
+      "value"
+    )
+    outcome = app.run(["generate", "test", "--framework=unknown"])
+    assert_equal(1, outcome.status, "status")
+    assert_equal(
+      "ERROR: \"foo generate test\" was called with arguments \"--framework=unknown\"",
+      outcome.output,
+      "error"
+    )
+
+  test_optional_argument: ->
+    assert_equal("wuh?", app.run(["echo"]).output, "default")
+    assert_equal("hello", app.run(["echo", "hello"]).output, "input")
+
+  test_required_argument: ->
+    assert_equal(
+      "started - root: .",
+      app.run(["start", "."]).output,
+      "with arg"
+    )
+    outcome = app.run(["start"])
+    assert_equal(1, outcome.status, "status")
+    assert_equal(
+      "ERROR: \"foo start\" was called with no arguments\nUsage: \"foo start ROOT\"",
+      outcome.output,
+      "error"
+    )
+
+  test_root_command_arguments_and_options: ->
+    convert = ConvertApp()
+    assert_equal(
+      "in.txt -> out.txt (png, overwrite: false)",
+      convert.run(["in.txt", "out.txt"]).output,
+      "defaults"
+    )
+    assert_equal(
+      "in.txt -> out.txt (jpeg, overwrite: true)",
+      convert.run(["--format=jpeg", "-f", "in.txt", "out.txt"]).output,
+      "options"
+    )
+    help = convert.run(["--help"]).output
+    assert_equal(
+      "Command:\n  convert\n\nUsage:\n  convert INPUT OUTPUT\n\nDescription:\n  Convert files\n\nArguments:\n  INPUT # Input file\n  OUTPUT # Output file\n\nOptions:\n  --help, -h # Print this help\n  --format # Output format\n  --overwrite, -f # Overwrite output file",
+      help,
+      "help"
+    )
+
+  test_subcommands_and_aliases: ->
+    assert_equal(
+      "generated tests - framework: minitest",
+      app.run(["generate", "test"]).output,
+      "subcommand"
+    )
+    assert_equal(
+      "generated configuration for apps: 0",
+      app.run(["g", "config"]).output,
+      "alias"
+    )
+    assert_equal("1.0.0", app.run(["version"]).output, "version")
+    assert_equal("1.0.0", app.run(["v"]).output, "short alias")
+    assert_equal("1.0.0", app.run(["--version"]).output, "long alias")

@@ -1,0 +1,7 @@
+name = "tya-cli"
+version = "0.1.0"
+
+[tasks]
+run = "tya run src/main.tya"
+test = "tya test tests"
+check = "tya check src/main.tya && tya test tests"
