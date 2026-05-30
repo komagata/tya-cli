@@ -28,9 +28,9 @@ class Command
   # @type Array
   options: []
 
-  # Command.subcommands stores nested commands.
+  # Command.commands stores nested commands.
   # @type Array
-  subcommands: []
+  commands: []
 
   # Command.initialize initializes command metadata.
   # @param name String primary command name.
@@ -65,11 +65,11 @@ class Command
     examples.push(text)
     self
 
-  # Command.find returns a matching subcommand by name or alias.
+  # Command.find returns a matching nested command by name or alias.
   # @param name String command name or alias.
-  # @return Command? matching subcommand.
+  # @return Command? matching nested command.
   find: name ->
-    for command in subcommands
+    for command in commands
       if command.matches?(name)
         return command
     nil
@@ -103,10 +103,10 @@ class Command
     self
 
   # Command.register registers a nested subcommand.
-  # @param command Command subcommand to register.
+  # @param command Command nested command to register.
   # @return Self this command.
   register: command ->
-    subcommands.push(command)
+    commands.push(command)
     self
 
   # Command.usage_for returns usage text for this command.
@@ -118,7 +118,7 @@ class Command
       parts.push(item)
     if name != ""
       parts.push(name)
-    if subcommands.len() > 0
+    if commands.len() > 0
       parts.push("[SUBCOMMAND]")
     for argument in arguments
       parts.push(argument_label(argument))

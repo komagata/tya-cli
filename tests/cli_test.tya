@@ -81,7 +81,7 @@ class VersionCommand extends cli.Command
 
   name: "version"
 
-  call: _ctx -> cli.Result.success("1.0.0")
+  call: _invocation -> cli.Result.success("1.0.0")
 
 class HiddenCommand extends cli.Command
   description: "Generate completion"
@@ -90,7 +90,7 @@ class HiddenCommand extends cli.Command
 
   name: "completion"
 
-  call: _ctx -> cli.Result.success("completion")
+  call: _invocation -> cli.Result.success("completion")
 
 class GenerateCommand extends cli.Command
   aliases: ["g"]
@@ -99,7 +99,7 @@ class GenerateCommand extends cli.Command
 
   name: "generate"
 
-  subcommands: [ConfigCommand(), TestCommand()]
+  commands: [ConfigCommand(), TestCommand()]
 
 class RootCommand extends cli.Application
   commands: [VersionCommand(), EchoCommand(), StartCommand(), StopCommand(), ExecCommand(), HiddenCommand(), GenerateCommand()]
@@ -237,7 +237,7 @@ class CliTest extends TestCase
       "help"
     )
 
-  test_subcommands_and_aliases: ->
+  test_nested_commands_and_aliases: ->
     assert_equal(
       "generated tests - framework: minitest",
       app.run(["generate", "test"]).output,
