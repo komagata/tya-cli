@@ -19,5 +19,6 @@ class TyaCliExample extends cli.Application
   commands: [HelloCommand()]
 
   name: "tya-cli-example"
+
 app = TyaCliExample()
 app.run_and_exit(args())
